@@ -245,7 +245,7 @@
 
             try {
                 const params = new URLSearchParams({ q: query });
-                const response = await fetch(`wikihumsearch/search?${params}`);
+                const response = await fetch(`search?${params}`);
                 const data = await response.json();
                 displayResults(data);
             } catch (error) {
@@ -293,7 +293,7 @@
          // otwieranie okna WYNIKU
         async function openModal(entryId) {
             try {
-                const response = await fetch(`wikihumsearch/entry/${entryId}`);
+                const response = await fetch(`entry/${entryId}`);
                 if (!response.ok) { throw new Error('Nie można załadować danych.'); }
                 const entry = await response.json();
 

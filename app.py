@@ -23,7 +23,7 @@ def serve_index():
     """funkcja serwuje główny plik HTML"""
     return send_from_directory(app.static_folder, 'index.html')
 
-@app.route("/wikihumsearch/search")
+@app.route("/search")
 def search():
     """obsługa zapytań wyszukiwania z frontendu"""
     query = request.args.get('q')
@@ -54,7 +54,7 @@ def search():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/wikihumsearch/entry/<entry_id>")
+@app.route("/entry/<entry_id>")
 def get_entry(entry_id):
     """ pobiera i zwraca dane jednego dokumentu na podstawie jego ID."""
     try:
@@ -69,4 +69,4 @@ def get_entry(entry_id):
 
 # -------------------------------- MAIN ----------------------------------------
 if __name__ == '__main__':
-    app.run(port=8080, debug=True)
+    app.run(port=8081, debug=True)
