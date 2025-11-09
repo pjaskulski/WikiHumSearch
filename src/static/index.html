@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WikiHumSearch</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f0f2f5; color: #1c1e21; line-height: 1.6; }
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            position: relative;
+        }
+        h1 { text-align: center; color: #0c4a6e; }
+        .search-form { display: flex; gap: 10px; margin-bottom: 2rem; }
+        #search-input { flex-grow: 1; padding: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
+        button { padding: 12px 20px; background-color: #0ea5e9; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; }
+        button:hover { background-color: #0284c7; }
+
+        .help-button {
+            position: absolute;
+            top: 2rem;
+            right: 2rem;
+            padding: 8px 16px;
+            background-color: #167c2f;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .help-button:hover {
+            background-color: #5a6268;
+        }
+
+        .result-item { border: 1px solid #e0e0e0; padding: 15px; margin-bottom: 10px; border-radius: 6px; background-color: #fafafa; }
+        .result-item h3 { margin: 0 0 5px 0; color: #075985; }
+        .info {
+            font-size: 0.9em;
+            font-style: italic;
+            color: #555;
+            margin-top: -5px;
+            margin-bottom: 8px;
+        }
+        .smallinfo {
+            font-size: 0.7em;
+            color: #555;
+            margin-top: -5px;
+            margin-bottom: 6px;
+        }
+        .typy-container {
+            font-size: 0.9em;
+            font-style: italic;
+            color: #555;
+            margin-top: -2px;
+        }
+        .typy-tag {
+            display: inline-block;
+            font-size: 0.9em;
+            font-style: italic;
+            color: #555;
+            margin-right: 6px;
+        }
+        .result-item p { margin: 0; }
+
+        #results-info-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #666;
+            font-style: italic;
+            margin-bottom: 1rem;
+        }
+        .export-button {
+            display: inline-block;
+            padding: 6px 12px;
+            background-color: #0c4a6e;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-style: normal;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .export-button:hover {
+            background-color: #075985;
+        }
+
+        #reset-button {
+            background-color: #6c757d;
+        }
+        #reset-button:hover {
+            background-color: #5a6268;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.6);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 10% auto;
+            padding: 25px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 600px;
+            border-radius: 8px;
+            position: relative;
+        }
+        .close-button {
+            color: #aaa;
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .close-button:hover,
+        .close-button:focus {
+            color: black;
+        }
+        .modal-text-content {
+            max-height: 400px;
+            overflow-y: auto;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            margin-bottom: 10px;
+        }
+        .entry-nazwa-link {
+            cursor: pointer;
+            color: #075985;
+            text-decoration: underline;
+        }
+        .entry-nazwa-link:hover {
+            color: #0ea5e9;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <button id="help-button" class="help-button">Pomoc</button>
+
+        <h1>🏛️ WikiHumSearch - wyszukiwanie wektorowe</h1>
+
+        <form id="search-form">
+            <div class="search-form">
+                <input type="text" id="search-input" placeholder="np. 'człowiek militaria'...">
+                <button type="submit">Szukaj</button>
+                <button type="button" id="reset-button">Wyczyść</button>
+            </div>
+        </form>
+
+        <div id="results-info-container">
+            <span id="results-info-text"></span>
+            <a href="#" id="export-link" class="export-button" style="display: none;">Eksportuj</a>
+        </div>
+
+        <div id="results"></div>
+    </div>
+
+    <div id="entry-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" id="close-entry-button">&times;</span>
+            <div id="modal-body">
+            </div>
+        </div>
+    </div>
+
+    <div id="help-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" id="close-help-button">&times;</span>
+            <h2>Pomoc</h2>
+            <p>Witaj w wyszukiwarce wektorowej WikiHumSearch!</p>
+            <p><strong>Jak szukać:</strong></p>
+            <ul style="margin-top: -10px;">
+                <li>Wpisz w pole wyszukiwania interesującą Cię frazę (np. "matematycy", "człowiek militaria").</li>
+                <li>Naciśnij "Szukaj" lub klawisz Enter.</li>
+                <li>Wyszukiwarka korzysta z wyszukiwania hybrydowego, łącząc słowa kluczowe (10%) z wyszukiwaniem semantycznym - znaczeniowym (90%), aby dać jak najlepsze wyniki.</li>
+            </ul>
+            <p><strong>Wyniki:</strong></p>
+            <ul style="margin-top: -10px;">
+                <li>Kliknij na tytuł (label) wyniku, aby zobaczyć więcej szczegółów w osobnym oknie (ID, link, opis, właściwości, współrzędne).</li>
+                <li>Użyj przycisku "Wyczyść", aby zresetować widok.</li>
+            </ul>
+            <p><strong>Dodatkowe wyjaśnienia:</strong><br>
+                Cel mechanizmu wyszukiwania semantycznego jest taki sam jak projektu <a href="https://www.wikidata.org/wiki/Wikidata:Embedding_Project" target="_blank">Wikidata:Embedding Project</a> (Wikidata Vector Database):
+"Wyszukiwanie wektorowe jest przeznaczone przede wszystkim do eksploracji i odkrywania. Pomaga użytkownikom i badaczom identyfikować powiązane elementy, które mogą nie pojawić się w wynikach tradycyjnego wyszukiwania słów kluczowych. Wyniki nie mają służyć jako bezpośrednie odpowiedzi, ale jako punkt wyjścia do dalszych badań i analiz."<br>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('search-form');
+        const input = document.getElementById('search-input');
+        const resultsContainer = document.getElementById('results');
+        const resetButton = document.getElementById('reset-button');
+
+        const resultsInfoText = document.getElementById('results-info-text');
+
+        const exportLink = document.getElementById('export-link');
+        let currentHits = [];
+
+        // dla wyników
+        const modal = document.getElementById('entry-modal');
+        const modalBody = document.getElementById('modal-body');
+        const closeEntryButton = document.getElementById('close-entry-button');
+
+        // dla pomocy
+        const helpButton = document.getElementById('help-button');
+        const helpModal = document.getElementById('help-modal');
+        const closeHelpButton = document.getElementById('close-help-button');
+
+        function resetApplication() {
+            input.value = '';
+            resultsContainer.innerHTML = '';
+            resultsInfoText.textContent = '';
+            exportLink.style.display = 'none';
+            currentHits = [];
+            input.focus();
+        }
+
+        async function performSearch() {
+            const query = input.value;
+            if (!query) { return; }
+
+            resultsInfoText.textContent = 'Wyszukiwanie...';
+            exportLink.style.display = 'none';
+            currentHits = [];
+
+            try {
+                const params = new URLSearchParams({ q: query });
+                const response = await fetch(`wikihumsearch/search?${params}`);
+                const data = await response.json();
+                displayResults(data);
+            } catch (error) {
+                resultsInfoText.textContent = 'Błąd podczas pobierania wyników.';
+                console.error('Wyszukiwanie nie powiodło się:', error);
+            }
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            performSearch();
+        });
+
+        function displayResults(data) {
+            resultsContainer.innerHTML = '';
+
+            resultsInfoText.textContent = `Znaleziono ${data.estimatedTotalHits} wyników w ${data.processingTimeMs}ms.`;
+
+            if (data.hits && data.hits.length > 0) {
+                currentHits = data.hits;
+                exportLink.style.display = 'inline-block';
+
+                data.hits.forEach(hit => {
+                    const item = document.createElement('div');
+                    item.className = 'result-item';
+                    let classHtml = '';
+                    if (hit.class) {
+                        classHtml = `<div class="typy-container">klasa: <span class="typy-tag">${hit.class}</span></div>`;
+                    }
+                    item.innerHTML = `
+                        <h3 class="entry-nazwa-link" data-id="${hit.id}">${hit.label}</h3>
+                        ${classHtml}
+                        <p class="smallinfo">RankingScore: ${(hit._rankingScore).toFixed(2)}</p>
+                        <p>${hit._formatted.description}</p>
+                    `;
+                    resultsContainer.appendChild(item);
+                });
+            } else {
+                currentHits = [];
+                exportLink.style.display = 'none';
+                resultsContainer.innerHTML = '<p>Brak wyników.</p>';
+            }
+        }
+
+         // otwieranie okna WYNIKU
+        async function openModal(entryId) {
+            try {
+                const response = await fetch(`wikihumsearch/entry/${entryId}`);
+                if (!response.ok) { throw new Error('Nie można załadować danych.'); }
+                const entry = await response.json();
+
+                let classHtml = '';
+                if (entry.class) {
+                    classHtml = `<div class="typy-container">klasa: <span class="typy-tag">${entry.class}</span></div>`;
+                }
+                let linkHtml = '';
+                if (entry.link) {
+                    linkHtml = `<p class="info">Link: <a href="${entry.link}" target="_blank" rel="noopener noreferrer">${entry.link}</a></p>`;
+                }
+                let geoHtml = '';
+                if (entry.geo) {
+                    geoHtml = `<p class="info">współrzędne: ${entry.geo}</p>`;
+                }
+                let propertyHtml = '';
+                if (entry.property) {
+                    propertyHtml = `
+                        <h4 style="margin-top: 15px; margin-bottom: 5px;">Właściwości (Property):</h4>
+                        <p class="modal-text-content">${entry.property}</p>
+                    `;
+                }
+
+                modalBody.innerHTML = `
+                    <h2>${entry.label}</h2>
+                    ${entry.id ? `<p class="info">ID: ${entry.id}</p>` : ''}
+                    ${classHtml}
+                    ${linkHtml}
+                    ${geoHtml}
+                    <p class="modal-text-content">${entry.description}</p>
+                    ${propertyHtml}
+                `;
+
+                modal.style.display = 'block';
+            } catch (error) {
+                modalBody.innerHTML = `<p style="color: red;">${error.message}</p>`;
+                modal.style.display = 'block';
+            }
+        }
+
+        // zamykanie okna WYNIKU
+        function closeEntryModal() {
+            modal.style.display = 'none';
+            modalBody.innerHTML = '';
+        }
+
+        // CSV
+        function exportToCSV() {
+            if (currentHits.length === 0) {
+                return;
+            }
+
+            // funkcja pomocnicza do 'escapowania' pól CSV
+            const escapeCSV = (str) => {
+                if (str === null || str === undefined) return '""';
+                let result = String(str).replace(/"/g, '""');
+                return `"${result}"`;
+            };
+
+            const headers = '"label","link"';
+            const rows = currentHits.map(hit => {
+                const label = escapeCSV(hit.label);
+                const link = escapeCSV(hit.link);
+                return [label, link].join(',');
+            });
+
+            // BOM (Byte Order Mark) dla UTF-8
+            const csvString = "\uFEFF" + [headers, ...rows].join('\n');
+
+            const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'wikihum_export.csv');
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // nasłuchiwanie na kliknięcia w kontenerze wyników
+        resultsContainer.addEventListener('click', (e) => {
+            if (e.target && e.target.classList.contains('entry-nazwa-link')) {
+                e.preventDefault();
+                const entryId = e.target.dataset.id;
+                openModal(entryId);
+            }
+        });
+
+        resetButton.addEventListener('click', resetApplication);
+
+        // do zamykania okna WYNIKU
+        closeEntryButton.addEventListener('click', closeEntryModal);
+
+        // do okna POMOCY
+        helpButton.addEventListener('click', () => {
+            helpModal.style.display = 'block';
+        });
+
+        closeHelpButton.addEventListener('click', () => {
+            helpModal.style.display = 'none';
+        });
+
+        // link do eksportu
+        exportLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            exportToCSV();
+        });
+
+        // Zamykanie okien przy kliknięciu na tło
+        window.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeEntryModal();
+            }
+            if (e.target === helpModal) {
+                helpModal.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
