@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WikiHumSearch</title>
+    <link rel="icon" href="/static/favicon.png" type="image/png">
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f0f2f5; color: #1c1e21; line-height: 1.6; }
         .container {
@@ -16,7 +17,7 @@
             position: relative;
         }
         h1 { text-align: center; color: #0c4a6e; }
-        .search-form { display: flex; gap: 10px; margin-bottom: 2rem; }
+        .search-form { display: flex; gap: 10px; margin-bottom: 1rem; }
         #search-input { flex-grow: 1; padding: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
         button { padding: 12px 20px; background-color: #0ea5e9; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; }
         button:hover { background-color: #0284c7; }
@@ -36,6 +37,16 @@
         }
         .help-button:hover {
             background-color: #5a6268;
+        }
+
+        .disclaimer-text {
+            font-size: 0.9em;
+            color: #4a5568;
+            background-color: #f0f4f8;
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+            margin-bottom: 2rem;
         }
 
         .result-item { border: 1px solid #e0e0e0; padding: 15px; margin-bottom: 10px; border-radius: 6px; background-color: #fafafa; }
@@ -166,6 +177,10 @@
             </div>
         </form>
 
+        <div class="disclaimer-text">
+            * Mechanizm wyszukiwania znajduje się obecnie na wczesnym etapie testów, wyniki mogą być niekompletne lub niedokładne. Zapoznaj się z instrukcjami (Pomoc).
+        </div>
+
         <div id="results-info-container">
             <span id="results-info-text"></span>
             <a href="#" id="export-link" class="export-button" style="display: none;">Eksportuj</a>
@@ -189,13 +204,13 @@
             <p>Witaj w wyszukiwarce wektorowej WikiHumSearch!</p>
             <p><strong>Jak szukać:</strong></p>
             <ul style="margin-top: -10px;">
-                <li>Wpisz w pole wyszukiwania interesującą Cię frazę (np. "matematycy", "człowiek militaria").</li>
+                <li>Wpisz w pole wyszukiwania interesującą Cię frazę np. "matematycy", "człowiek militaria" (bez cudzysłowów!).</li>
                 <li>Naciśnij "Szukaj" lub klawisz Enter.</li>
-                <li>Wyszukiwarka korzysta z wyszukiwania hybrydowego, łącząc słowa kluczowe (10%) z wyszukiwaniem semantycznym - znaczeniowym (90%), aby dać jak najlepsze wyniki.</li>
+                <li>Wyszukiwarka korzysta z wyszukiwania hybrydowego, łącząc słowa kluczowe (10%) z wyszukiwaniem wektorowym - semantycznym (90%), aby dać jak najlepsze wyniki.</li>
             </ul>
             <p><strong>Wyniki:</strong></p>
             <ul style="margin-top: -10px;">
-                <li>Kliknij na tytuł (label) wyniku, aby zobaczyć więcej szczegółów w osobnym oknie (ID, link, opis, właściwości, współrzędne).</li>
+                <li>Kliknij na tytuł (label) wyniku, aby zobaczyć więcej szczegółów w osobnym oknie ( link do WikiHum, listę właściwości, współrzędne geograficzne dla miejscowości).</li>
                 <li>Użyj przycisku "Wyczyść", aby zresetować widok.</li>
             </ul>
             <p><strong>Dodatkowe wyjaśnienia:</strong><br>

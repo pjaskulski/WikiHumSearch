@@ -18,7 +18,7 @@ app = Flask(__name__, static_folder='static')
 
 
 # ------------------------------ API ENDPOINTS ---------------------------------
-@app.route("/wikihumsearch")
+@app.route("/")
 def serve_index():
     """funkcja serwuje główny plik HTML"""
     return send_from_directory(app.static_folder, 'index.html')
