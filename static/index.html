@@ -108,6 +108,22 @@
         #reset-button:hover {
             background-color: #5a6268;
         }
+
+        /* Styl dla przycisku Load More */
+        #load-more-container {
+            text-align: center;
+            margin-top: 20px;
+            display: none; /* Domyślnie ukryty */
+        }
+        #load-more-button {
+            background-color: #fff;
+            color: #0ea5e9;
+            border: 2px solid #0ea5e9;
+        }
+        #load-more-button:hover {
+            background-color: #f0f9ff;
+        }
+
         .modal {
             display: none;
             position: fixed;
@@ -186,17 +202,20 @@
 
         <div id="results-info-container">
             <span id="results-info-text"></span>
-            <a href="#" id="export-link" class="export-button" style="display: none;">Eksportuj</a>
+            <a href="#" id="export-link" class="export-button" style="display: none;">Eksportuj (wszystkie widoczne)</a>
         </div>
 
         <div id="results"></div>
+
+        <div id="load-more-container">
+            <button id="load-more-button">Załaduj więcej wyników</button>
+        </div>
     </div>
 
     <div id="entry-modal" class="modal">
         <div class="modal-content">
             <span class="close-button" id="close-entry-button">&times;</span>
-            <div id="modal-body">
-            </div>
+            <div id="modal-body"></div>
         </div>
     </div>
 
@@ -215,7 +234,12 @@
             <p><strong>Wyniki:</strong></p>
             <ul style="margin-top: -10px;">
                 <li>Kliknij na tytuł (label) wyniku, aby zobaczyć więcej szczegółów w osobnym oknie ( link do WikiHum, listę właściwości, współrzędne geograficzne dla miejscowości).</li>
+                <li>Jeśli wyników jest dużo, na dole listy pojawi się przycisk <strong>"Załaduj więcej wyników"</strong>.</li>
                 <li>Użyj przycisku "Wyczyść", aby zresetować widok.</li>
+            </ul>
+            <p><strong>Eksport:</strong></p>
+            <ul style="margin-top: -10px;">
+                <li>Przycisk "Eksportuj" pobierze wszystkie aktualnie załadowane (widoczne na ekranie) wyniki do pliku CSV.</li>
             </ul>
             <p><strong>Dodatkowe wyjaśnienia:</strong><br>
                 Cel mechanizmu wyszukiwania semantycznego jest taki sam jak projektu <a href="https://www.wikidata.org/wiki/Wikidata:Embedding_Project" target="_blank">Wikidata:Embedding Project</a> (Wikidata Vector Database):
@@ -229,18 +253,24 @@
         const input = document.getElementById('search-input');
         const resultsContainer = document.getElementById('results');
         const resetButton = document.getElementById('reset-button');
-
         const resultsInfoText = document.getElementById('results-info-text');
-
         const exportLink = document.getElementById('export-link');
-        let currentHits = [];
 
-        // dla wyników
+        // Elementy paginacji
+        const loadMoreContainer = document.getElementById('load-more-container');
+        const loadMoreButton = document.getElementById('load-more-button');
+
+        // Zmienne stanu
+        let allLoadedHits = []; // Przechowuje wszystkie załadowane hity (dla CSV)
+        let currentOffset = 0;
+        const LIMIT = 20;
+        let estimatedTotalHits = 0;
+        let lastQuery = "";
+
+        // Modalne okna
         const modal = document.getElementById('entry-modal');
         const modalBody = document.getElementById('modal-body');
         const closeEntryButton = document.getElementById('close-entry-button');
-
-        // dla pomocy
         const helpButton = document.getElementById('help-button');
         const helpModal = document.getElementById('help-modal');
         const closeHelpButton = document.getElementById('close-help-button');
@@ -250,91 +280,131 @@
             resultsContainer.innerHTML = '';
             resultsInfoText.textContent = '';
             exportLink.style.display = 'none';
-            currentHits = [];
+            loadMoreContainer.style.display = 'none';
+
+            allLoadedHits = [];
+            currentOffset = 0;
+            estimatedTotalHits = 0;
+            lastQuery = "";
+
             input.focus();
         }
 
-        async function performSearch() {
+        // Główna funkcja wyszukiwania
+        // isNewSearch = true -> czyści wyniki i szuka od zera
+        // isNewSearch = false -> "load more", dokleja wyniki
+        async function fetchResults(isNewSearch = true) {
             const query = input.value;
-            if (!query) { return; }
+            if (!query) return;
 
-            resultsInfoText.textContent = 'Wyszukiwanie...';
-            exportLink.style.display = 'none';
-            currentHits = [];
+            if (isNewSearch) {
+                lastQuery = query;
+                currentOffset = 0;
+                allLoadedHits = [];
+                resultsContainer.innerHTML = '';
+                resultsInfoText.textContent = 'Wyszukiwanie...';
+                exportLink.style.display = 'none';
+                loadMoreContainer.style.display = 'none';
+            } else {
+                loadMoreButton.textContent = "Ładowanie...";
+                loadMoreButton.disabled = true;
+            }
 
             try {
-                const params = new URLSearchParams({ q: query });
+                // Budowanie URL z parametrami
+                const params = new URLSearchParams({
+                    q: lastQuery,
+                    limit: LIMIT,
+                    offset: currentOffset
+                });
+
                 const response = await fetch(`search?${params}`);
                 const data = await response.json();
-                displayResults(data);
+
+                estimatedTotalHits = data.estimatedTotalHits;
+
+                // Dodajemy nowe hity do głównej listy
+                if (data.hits && data.hits.length > 0) {
+                    allLoadedHits = [...allLoadedHits, ...data.hits];
+                    renderHits(data.hits); // Renderujemy tylko nową partię
+
+                    // Zwiększamy offset na przyszłość
+                    currentOffset += data.hits.length;
+                } else if (isNewSearch) {
+                    resultsContainer.innerHTML = '<p>Brak wyników.</p>';
+                }
+
+                updateUIStats(data.processingTimeMs);
+
             } catch (error) {
                 resultsInfoText.textContent = 'Błąd podczas pobierania wyników.';
-                console.error('Wyszukiwanie nie powiodło się:', error);
+                console.error('Błąd:', error);
+            } finally {
+                loadMoreButton.textContent = "Załaduj więcej wyników";
+                loadMoreButton.disabled = false;
             }
         }
 
+        function updateUIStats(timeMs) {
+            // Aktualizacja tekstu informacyjnego
+            resultsInfoText.textContent = `Wyświetlono ${allLoadedHits.length} z ok. ${estimatedTotalHits} wyników (czas: ${timeMs}ms).`;
+
+            // Pokazanie przycisku eksportu jeśli są dane
+            if (allLoadedHits.length > 0) {
+                exportLink.style.display = 'inline-block';
+            }
+
+            // Obsługa widoczności przycisku "Load More"
+            // Jeśli mamy załadowanych mniej wyników niż wynosi całkowita liczba -> pokaż przycisk
+            if (allLoadedHits.length < estimatedTotalHits) {
+                loadMoreContainer.style.display = 'block';
+            } else {
+                loadMoreContainer.style.display = 'none';
+            }
+        }
+
+        function renderHits(hits) {
+            hits.forEach(hit => {
+                const item = document.createElement('div');
+                item.className = 'result-item';
+                let classHtml = '';
+                if (hit.class) {
+                    classHtml = `<div class="typy-container">klasa: <span class="typy-tag">${hit.class}</span></div>`;
+                }
+                item.innerHTML = `
+                    <h3 class="entry-nazwa-link" data-id="${hit.id}">${hit.label}</h3>
+                    ${classHtml}
+                    <p class="smallinfo">RankingScore: ${(hit._rankingScore).toFixed(2)}</p>
+                    <p>${hit._formatted.description}</p>
+                `;
+                resultsContainer.appendChild(item);
+            });
+        }
+
+        // Obsługa formularza (Nowe wyszukiwanie)
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            performSearch();
+            fetchResults(true);
         });
 
-        function displayResults(data) {
-            resultsContainer.innerHTML = '';
+        // Obsługa przycisku "Załaduj więcej"
+        loadMoreButton.addEventListener('click', () => {
+            fetchResults(false);
+        });
 
-            resultsInfoText.textContent = `Znaleziono ${data.estimatedTotalHits} wyników w ${data.processingTimeMs}ms.`;
+        // --- Poniżej bez większych zmian logicznych, tylko obsługa modali i CSV ---
 
-            if (data.hits && data.hits.length > 0) {
-                currentHits = data.hits;
-                exportLink.style.display = 'inline-block';
-
-                data.hits.forEach(hit => {
-                    const item = document.createElement('div');
-                    item.className = 'result-item';
-                    let classHtml = '';
-                    if (hit.class) {
-                        classHtml = `<div class="typy-container">klasa: <span class="typy-tag">${hit.class}</span></div>`;
-                    }
-                    item.innerHTML = `
-                        <h3 class="entry-nazwa-link" data-id="${hit.id}">${hit.label}</h3>
-                        ${classHtml}
-                        <p class="smallinfo">RankingScore: ${(hit._rankingScore).toFixed(2)}</p>
-                        <p>${hit._formatted.description}</p>
-                    `;
-                    resultsContainer.appendChild(item);
-                });
-            } else {
-                currentHits = [];
-                exportLink.style.display = 'none';
-                resultsContainer.innerHTML = '<p>Brak wyników.</p>';
-            }
-        }
-
-         // otwieranie okna WYNIKU
         async function openModal(entryId) {
             try {
                 const response = await fetch(`entry/${entryId}`);
                 if (!response.ok) { throw new Error('Nie można załadować danych.'); }
                 const entry = await response.json();
 
-                let classHtml = '';
-                if (entry.class) {
-                    classHtml = `<div class="typy-container">klasa: <span class="typy-tag">${entry.class}</span></div>`;
-                }
-                let linkHtml = '';
-                if (entry.link) {
-                    linkHtml = `<p class="info">Link: <a href="${entry.link}" target="_blank" rel="noopener noreferrer">${entry.link}</a></p>`;
-                }
-                let geoHtml = '';
-                if (entry.geo) {
-                    geoHtml = `<p class="info">współrzędne: ${entry.geo}</p>`;
-                }
-                let propertyHtml = '';
-                if (entry.property) {
-                    propertyHtml = `
-                        <h4 style="margin-top: 15px; margin-bottom: 5px;">Właściwości (Property):</h4>
-                        <p class="modal-text-content">${entry.property}</p>
-                    `;
-                }
+                let classHtml = entry.class ? `<div class="typy-container">klasa: <span class="typy-tag">${entry.class}</span></div>` : '';
+                let linkHtml = entry.link ? `<p class="info">Link: <a href="${entry.link}" target="_blank">${entry.link}</a></p>` : '';
+                let geoHtml = entry.geo ? `<p class="info">współrzędne: ${entry.geo}</p>` : '';
+                let propertyHtml = entry.property ?
+                    `<h4 style="margin-top: 15px; margin-bottom: 5px;">Właściwości:</h4><p class="modal-text-content">${entry.property}</p>` : '';
 
                 modalBody.innerHTML = `
                     <h2>${entry.label}</h2>
@@ -345,7 +415,6 @@
                     <p class="modal-text-content">${entry.description}</p>
                     ${propertyHtml}
                 `;
-
                 modal.style.display = 'block';
             } catch (error) {
                 modalBody.innerHTML = `<p style="color: red;">${error.message}</p>`;
@@ -353,83 +422,62 @@
             }
         }
 
-        // zamykanie okna WYNIKU
         function closeEntryModal() {
             modal.style.display = 'none';
             modalBody.innerHTML = '';
         }
 
-        // CSV
         function exportToCSV() {
-            if (currentHits.length === 0) {
-                return;
-            }
+            if (allLoadedHits.length === 0) return;
 
-            // funkcja pomocnicza do 'escapowania' pól CSV
             const escapeCSV = (str) => {
                 if (str === null || str === undefined) return '""';
                 let result = String(str).replace(/"/g, '""');
                 return `"${result}"`;
             };
 
-            const headers = '"label","link"';
-            const rows = currentHits.map(hit => {
+            const headers = '"label","link","description"';
+            // Eksportujemy allLoadedHits (wszystkie załadowane strony), a nie tylko ostatnią partię
+            const rows = allLoadedHits.map(hit => {
                 const label = escapeCSV(hit.label);
                 const link = escapeCSV(hit.link);
-                return [label, link].join(',');
+                // Dodaję opis do CSV bo może być przydatny
+                const desc = escapeCSV(hit.description || "");
+                return [label, link, desc].join(',');
             });
 
-            // BOM (Byte Order Mark) dla UTF-8
             const csvString = "\uFEFF" + [headers, ...rows].join('\n');
-
             const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.setAttribute('href', url);
             link.setAttribute('download', 'wikihum_export.csv');
-            link.style.display = 'none';
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
         }
 
-        // nasłuchiwanie na kliknięcia w kontenerze wyników
         resultsContainer.addEventListener('click', (e) => {
             if (e.target && e.target.classList.contains('entry-nazwa-link')) {
                 e.preventDefault();
-                const entryId = e.target.dataset.id;
-                openModal(entryId);
+                openModal(e.target.dataset.id);
             }
         });
 
         resetButton.addEventListener('click', resetApplication);
-
-        // do zamykania okna WYNIKU
         closeEntryButton.addEventListener('click', closeEntryModal);
 
-        // do okna POMOCY
-        helpButton.addEventListener('click', () => {
-            helpModal.style.display = 'block';
-        });
+        helpButton.addEventListener('click', () => helpModal.style.display = 'block');
+        closeHelpButton.addEventListener('click', () => helpModal.style.display = 'none');
 
-        closeHelpButton.addEventListener('click', () => {
-            helpModal.style.display = 'none';
-        });
-
-        // link do eksportu
         exportLink.addEventListener('click', (e) => {
             e.preventDefault();
             exportToCSV();
         });
 
-        // Zamykanie okien przy kliknięciu na tło
         window.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                closeEntryModal();
-            }
-            if (e.target === helpModal) {
-                helpModal.style.display = 'none';
-            }
+            if (e.target === modal) closeEntryModal();
+            if (e.target === helpModal) helpModal.style.display = 'none';
         });
     </script>
 </body>

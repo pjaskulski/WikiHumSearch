@@ -25,8 +25,11 @@ def serve_index():
 
 @app.route("/search")
 def search():
-    """obsługa zapytań wyszukiwania z frontendu"""
+    """obsługa zapytań wyszukiwania z frontendu z paginacją"""
     query = request.args.get('q')
+    # Pobieramy limit i offset, domyślnie 20 i 0
+    limit = request.args.get('limit', default=20, type=int)
+    offset = request.args.get('offset', default=0, type=int)
 
     FIXED_SEMANTIC_RATIO = 0.9
 
@@ -38,13 +41,16 @@ def search():
             "attributesToCrop": ["description:75"],
             'attributesToHighlight': ['*'],
             'showRankingScore': True,
+            'limit': limit,    # DODANO
+            'offset': offset,  # DODANO
             'hybrid': {
                 "semanticRatio": FIXED_SEMANTIC_RATIO,
                 "embedder": "openai"
             }
         }
 
-    print(f"⚡️ Wykonuję wyszukiwanie hybrydowe ze stałym ratio: {FIXED_SEMANTIC_RATIO}")
+    # Logujemy offset dla celów debugowania
+    print(f"⚡️ Szukam: '{query}' | Hybrid Ratio: {FIXED_SEMANTIC_RATIO} | Offset: {offset} | Limit: {limit}")
 
     index = client.index(INDEX_NAME)
     try:
