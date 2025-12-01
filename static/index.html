@@ -261,10 +261,16 @@
         const loadMoreButton = document.getElementById('load-more-button');
 
         // Zmienne stanu
-        let allLoadedHits = []; // Przechowuje wszystkie załadowane hity (dla CSV)
-        let loadedIds = new Set();
-        let currentOffset = 0;
-        const LIMIT = 20;
+        let allDisplayedHits = []; // To co widzi użytkownik (do eksportu CSV)
+        let loadedIds = new Set(); // Zbiór ID, by unikać duplikatów
+
+        let pendingBuffer = [];    // BUFOR: Wyniki pobrane, unikalne, ale jeszcze nie wyświetlone
+        let serverOffset = 0;      // Surowy offset dla serwera (ile przetworzył silnik)
+        let isEndOfData = false;   // znacznik czy serwer zwrócił już wszystko?
+
+        const DISPLAY_BATCH_SIZE = 20; // Ile wyników dodać na raz
+        const FETCH_SIZE = 40;         // Ile wyników pobrać z serwera (więcej niż DISPLAY_BATCH_SIZE, żeby pokryć duplikaty)
+
         let estimatedTotalHits = 0;
         let lastQuery = "";
 
@@ -283,27 +289,31 @@
             exportLink.style.display = 'none';
             loadMoreContainer.style.display = 'none';
 
-            allLoadedHits = [];
+            // Reset zmiennych
+            allDisplayedHits = [];
             loadedIds.clear();
-            currentOffset = 0;
+            pendingBuffer = [];
+            serverOffset = 0;
+            isEndOfData = false;
             estimatedTotalHits = 0;
             lastQuery = "";
 
             input.focus();
         }
 
-        // Główna funkcja wyszukiwania
-        // isNewSearch = true -> czyści wyniki i szuka od zera
-        // isNewSearch = false -> "load more", dokleja wyniki
-        async function fetchResults(isNewSearch = true) {
+        // Główna funkcja sterująca procesem
+        async function handleSearchOrLoadMore(isNewSearch = true) {
             const query = input.value;
             if (!query) return;
 
             if (isNewSearch) {
                 lastQuery = query;
-                currentOffset = 0;
-                allLoadedHits = [];
+                serverOffset = 0;
+                allDisplayedHits = [];
                 loadedIds.clear();
+                pendingBuffer = [];
+                isEndOfData = false;
+
                 resultsContainer.innerHTML = '';
                 resultsInfoText.textContent = 'Wyszukiwanie...';
                 exportLink.style.display = 'none';
@@ -314,36 +324,24 @@
             }
 
             try {
-                // Budowanie URL z parametrami
-                const params = new URLSearchParams({
-                    q: lastQuery,
-                    limit: LIMIT,
-                    offset: currentOffset
-                });
+                // Uzupełnianie bufora, jeśli brakuje w nim elementów
+                // powinno być co najmniej DISPLAY_BATCH_SIZE elementów do pokazania
+                // chyba, że dane się skończyły (isEndOfData)
+                while (pendingBuffer.length < DISPLAY_BATCH_SIZE && !isEndOfData) {
+                    await fetchNextBatchFromApi();
+                }
 
-                const response = await fetch(`search?${params}`);
-                const data = await response.json();
+                // Pobieranie z bufora
+                const hitsToDisplay = pendingBuffer.splice(0, DISPLAY_BATCH_SIZE);
 
-                estimatedTotalHits = data.estimatedTotalHits;
-
-                // Dodajemy nowe hity do głównej listy
-                if (data.hits && data.hits.length > 0) {
-                    const newUniqueHits = data.hits.filter(hit => !loadedIds.has(hit.id));
-                    newUniqueHits.forEach(hit => loadedIds.add(hit.id));
-
-                    allLoadedHits = [...allLoadedHits, ...newUniqueHits];
-
-                    if (newUniqueHits.length > 0) {
-                        renderHits(newUniqueHits);
-                    }
-
-                    // Zwiększamy offset o liczbę POBRANYCH wyników (mimo że unikalnych mogło być mniej)
-                    currentOffset += data.hits.length;
+                if (hitsToDisplay.length > 0) {
+                    renderHits(hitsToDisplay);
+                    allDisplayedHits = [...allDisplayedHits, ...hitsToDisplay];
                 } else if (isNewSearch) {
                     resultsContainer.innerHTML = '<p>Brak wyników.</p>';
                 }
 
-                updateUIStats(data.processingTimeMs);
+                updateUIStats();
 
             } catch (error) {
                 resultsInfoText.textContent = 'Błąd podczas pobierania wyników.';
@@ -354,18 +352,52 @@
             }
         }
 
-        function updateUIStats(timeMs) {
-            // Aktualizacja tekstu informacyjnego
-            resultsInfoText.textContent = `Wyświetlono ${allLoadedHits.length} z ok. ${estimatedTotalHits} wyników (czas: ${timeMs}ms).`;
+        // Funkcja pomocnicza: pobiera surowe dane z API i ładuje unikaty do bufora
+        async function fetchNextBatchFromApi() {
+            const params = new URLSearchParams({
+                q: lastQuery,
+                limit: FETCH_SIZE,
+                offset: serverOffset
+            });
 
-            // Pokazanie przycisku eksportu jeśli są dane
-            if (allLoadedHits.length > 0) {
+            const response = await fetch(`search?${params}`);
+            const data = await response.json();
+
+            estimatedTotalHits = data.estimatedTotalHits;
+            const receivedHits = data.hits || [];
+
+            // Weryfikacja czy to koniec danych na serwerze
+            // Jeśli przyszło mniej niż powinno, to znaczy że więcej nie ma
+            if (receivedHits.length < FETCH_SIZE) {
+                isEndOfData = true;
+            }
+
+            // Przesunięcie offsetu serwera o tyle, ile otrzymano (niezależnie od duplikatów)
+            serverOffset += receivedHits.length;
+
+            // Filtrowanie duplikatów
+            const newUniqueHits = receivedHits.filter(hit => !loadedIds.has(hit.id));
+
+            // Unikalne ID do zbioru i hity do bufora
+            newUniqueHits.forEach(hit => {
+                loadedIds.add(hit.id);
+                pendingBuffer.push(hit);
+            });
+
+            // Aktualizacja czasu (opcjonalnie można sumować, tu z ostatniego requestu)
+            window.lastProcessingTime = data.processingTimeMs;
+        }
+
+        function updateUIStats() {
+            const timeMs = window.lastProcessingTime || 0;
+            resultsInfoText.textContent = `Wyświetlono ${allDisplayedHits.length} z ok. ${estimatedTotalHits} wyników.`;
+
+            if (allDisplayedHits.length > 0) {
                 exportLink.style.display = 'inline-block';
             }
 
-            // Obsługa widoczności przycisku "Load More"
-            // Jeśli mamy załadowanych mniej wyników niż wynosi całkowita liczba -> pokaż przycisk
-            if (allLoadedHits.length < estimatedTotalHits) {
+            // Przycisk widoczny, jeśli coś jest w buforze lub odczytywanie jeszcze nie dotarło do końca danych na serwerze
+            if (pendingBuffer.length > 0 || !isEndOfData) {
                 loadMoreContainer.style.display = 'block';
             } else {
                 loadMoreContainer.style.display = 'none';
@@ -393,15 +425,13 @@
         // Obsługa formularza (Nowe wyszukiwanie)
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            fetchResults(true);
+            handleSearchOrLoadMore(true);
         });
 
         // Obsługa przycisku "Załaduj więcej"
         loadMoreButton.addEventListener('click', () => {
-            fetchResults(false);
+            handleSearchOrLoadMore(false);
         });
-
-        // --- Poniżej bez większych zmian logicznych, tylko obsługa modali i CSV ---
 
         async function openModal(entryId) {
             try {
@@ -437,7 +467,7 @@
         }
 
         function exportToCSV() {
-            if (allLoadedHits.length === 0) return;
+            if (allDisplayedHits.length === 0) return;
 
             const escapeCSV = (str) => {
                 if (str === null || str === undefined) return '""';
@@ -446,11 +476,9 @@
             };
 
             const headers = '"label","link","description"';
-            // Eksportujemy allLoadedHits (wszystkie załadowane strony), a nie tylko ostatnią partię
-            const rows = allLoadedHits.map(hit => {
+            const rows = allDisplayedHits.map(hit => {
                 const label = escapeCSV(hit.label);
                 const link = escapeCSV(hit.link);
-                // Dodaję opis do CSV bo może być przydatny
                 const desc = escapeCSV(hit.description || "");
                 return [label, link, desc].join(',');
             });
