@@ -262,6 +262,7 @@
 
         // Zmienne stanu
         let allLoadedHits = []; // Przechowuje wszystkie załadowane hity (dla CSV)
+        let loadedIds = new Set();
         let currentOffset = 0;
         const LIMIT = 20;
         let estimatedTotalHits = 0;
@@ -283,6 +284,7 @@
             loadMoreContainer.style.display = 'none';
 
             allLoadedHits = [];
+            loadedIds.clear();
             currentOffset = 0;
             estimatedTotalHits = 0;
             lastQuery = "";
@@ -301,6 +303,7 @@
                 lastQuery = query;
                 currentOffset = 0;
                 allLoadedHits = [];
+                loadedIds.clear();
                 resultsContainer.innerHTML = '';
                 resultsInfoText.textContent = 'Wyszukiwanie...';
                 exportLink.style.display = 'none';
@@ -325,10 +328,16 @@
 
                 // Dodajemy nowe hity do głównej listy
                 if (data.hits && data.hits.length > 0) {
-                    allLoadedHits = [...allLoadedHits, ...data.hits];
-                    renderHits(data.hits); // Renderujemy tylko nową partię
+                    const newUniqueHits = data.hits.filter(hit => !loadedIds.has(hit.id));
+                    newUniqueHits.forEach(hit => loadedIds.add(hit.id));
 
-                    // Zwiększamy offset na przyszłość
+                    allLoadedHits = [...allLoadedHits, ...newUniqueHits];
+
+                    if (newUniqueHits.length > 0) {
+                        renderHits(newUniqueHits);
+                    }
+
+                    // Zwiększamy offset o liczbę POBRANYCH wyników (mimo że unikalnych mogło być mniej)
                     currentOffset += data.hits.length;
                 } else if (isNewSearch) {
                     resultsContainer.innerHTML = '<p>Brak wyników.</p>';
